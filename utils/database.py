@@ -1,4 +1,5 @@
 import sqlite3
+
 from langchain.tools import tool
 
 ALLOW_LIST = [
@@ -38,26 +39,20 @@ def guarded_connect(table_name: str):
 
 
 @tool
-def query_table(table: str, query: str):
+def query_table(table: str, query: str) -> str:
     """Connect to table using guarded connection, run query, and return stringified results."""
-    con = guarded_connect(table)
-    cur = con.cursor()
-    cur.execute(query)
-    rows = cur.fetchall()
+    result = None
+    try:
+        con = guarded_connect(table)
+        cur = con.cursor()
+        cur.execute(query)
+        rows = cur.fetchall()
 
-    # Get column names
-    columns = [description[0] for description in cur.description]
-
-    # Format results
-    lines = []
-    lines.append(" | ".join(columns))
-    lines.append("-" * len(lines[-1]))
-    for row in rows:
-        lines.append(
-            " | ".join(str(cell) if cell is not None else "NULL" for cell in row)
-        )
-
-    return "\n".join(lines)
+        result = str(rows)
+        pass
+    except Exception as e:
+        result = f"Error: {e}"
+    return result
 
 
 @tool
@@ -71,7 +66,7 @@ def list_tables() -> str:
             cur = con.cursor()
 
             # Find subtables
-            cur.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '{table}_%'")
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
             subtables = [st[0] for st in cur.fetchall()]
 
             if subtables:
@@ -80,10 +75,10 @@ def list_tables() -> str:
                 parent_cols = [col[1] for col in cur.fetchall()]
                 output.append(f"\n{table} (Parent): {', '.join(parent_cols)}")
                 output.append("  Subtables:")
-                for st in subtables:
+                for idx, st in enumerate(subtables):
                     cur.execute(f"PRAGMA table_info({st})")
                     cols = [col[1] for col in cur.fetchall()]
-                    output.append(f"    - {st}: {', '.join(cols)}")
+                    output.append(f"    {idx + 1}. {st}: {', '.join(cols)}")
             else:
                 # No subtables
                 cur.execute(f"PRAGMA table_info({table})")
@@ -92,6 +87,9 @@ def list_tables() -> str:
 
             con.close()
         except Exception as e:
-            output.append(f"\n{table}: Error - {str(e)}")
+            output.append(f"\n{table}: Error - {e!s}")
 
     return "\n".join(output)
+
+
+tools = [list_tables, query_table]
