@@ -1,3 +1,4 @@
+import csv
 import json
 
 from langchain.messages import AIMessage
@@ -104,25 +105,47 @@ def main():
     with open("./data/dev.json") as f:
         data = json.loads(f.read())
 
-    count = 0
-    for item in tqdm(data, desc="Evaluating"):
-        table, question, gold_query = item["db_id"], item["question"], item["query"]
-        agent = build_agent(table)
-        result = agent.invoke(
-            {
-                "db_id": table,
-                "messages": [{"role": "user", "content": question}],
-            }
+    correct_count = 0
+
+    csv_path = "./results.csv"
+    with open(csv_path, mode="w", newline="", encoding="utf-8") as f:
+        # Save results incrementally to CSV
+        writer = csv.DictWriter(
+            f, fieldnames=["gold_query", "gold_results", "agent_query", "agent_results"]
         )
+        writer.writeheader()
 
-        agent_query = result["messages"][-1].content
-        gold_results = query_table(table, gold_query)
-        agent_results = query_table(table, agent_query)
+        for item in tqdm(data, desc="Evaluating"):
+            table, question, gold_query = item["db_id"], item["question"], item["query"]
+            agent = build_agent(table)
+            result = agent.invoke(
+                {
+                    "db_id": table,
+                    "messages": [{"role": "user", "content": question}],
+                }
+            )
 
-        if gold_results == agent_results:
-            count += 1
+            agent_query = result["messages"][-1].content
+            gold_results = query_table(table, gold_query)
+            agent_results = query_table(table, agent_query)
 
-    print(f"Correct queries: {count}")
+            if gold_results == agent_results:
+                correct_count += 1
+
+            # Convert results to string representation
+            gold_results_str = str(gold_results) if gold_results else "[]"
+            agent_results_str = str(agent_results) if agent_results else "[]"
+            row = {
+                "gold_query": gold_query,
+                "gold_results": gold_results_str,
+                "agent_query": agent_query,
+                "agent_results": agent_results_str,
+            }
+            writer.writerow(row)
+            f.flush()
+
+    print(f"Correct queries: {correct_count}")
+    print(f"Results saved to {csv_path}")
 
 
 if __name__ == "__main__":
