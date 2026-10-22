@@ -1,4 +1,5 @@
 import sqlite3
+from typing import Any
 
 from langchain.tools import tool
 
@@ -30,17 +31,17 @@ DATABASE_ROOT_DIR = "./data/database"
 
 def guarded_connect(table_name: str):
     """Connect to database after validating table name against allow list."""
-    if table_name not in ALLOW_LIST:
-        raise ValueError(f"Table '{table_name}' is not in the allow list")
+
+    assert table_name in ALLOW_LIST
 
     path = f"{DATABASE_ROOT_DIR}/{table_name}/{table_name}.sqlite"
     con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     return con
 
 
-@tool
-def query_table(table: str, query: str) -> str:
-    """Connect to table using guarded connection, run query, and return stringified results."""
+def query_table(table: str, query: str) -> list[Any]:
+    """Input to this tool is a table and a SQL query, output is a result from the database.
+    If the query is not correct, an error message will be returned."""
     result = None
     try:
         con = guarded_connect(table)
@@ -48,48 +49,42 @@ def query_table(table: str, query: str) -> str:
         cur.execute(query)
         rows = cur.fetchall()
 
-        result = str(rows)
-        pass
-    except Exception as e:
-        result = f"Error: {e}"
+        result = rows
+    except Exception:
+        result = []
     return result
 
 
 @tool
-def list_tables() -> str:
-    """List all tables in allow list with their columns and subtables."""
-    output = ["Database Tables and Columns:", "=" * 50]
+def list_tables(table: str) -> str:
+    """Input to the tool is the database name, output is a list of tables with columns in the database."""
+    db_info = []
 
-    for table in ALLOW_LIST:
-        try:
-            con = guarded_connect(table)
-            cur = con.cursor()
+    try:
+        con = guarded_connect(table)
+        cur = con.cursor()
 
-            # Find subtables
-            cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
-            subtables = [st[0] for st in cur.fetchall()]
+        # Find tables
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [row[0] for row in cur.fetchall()]
 
-            if subtables:
-                # Parent table columns
-                cur.execute(f"PRAGMA table_info({table})")
-                parent_cols = [col[1] for col in cur.fetchall()]
-                output.append(f"\n{table} (Parent): {', '.join(parent_cols)}")
-                output.append("  Subtables:")
-                for idx, st in enumerate(subtables):
-                    cur.execute(f"PRAGMA table_info({st})")
-                    cols = [col[1] for col in cur.fetchall()]
-                    output.append(f"    {idx + 1}. {st}: {', '.join(cols)}")
-            else:
-                # No subtables
-                cur.execute(f"PRAGMA table_info({table})")
-                cols = [col[1] for col in cur.fetchall()]
-                output.append(f"\n{table}: {', '.join(cols)}")
+        res = []
+        for idx, tab in enumerate(tables):
+            result = f"{idx + 1}. {tab}, "
+            cols = [
+                cols[1] for cols in cur.execute(f"PRAGMA table_info({tab});").fetchall()
+            ]
+            result += f"COLUMNS = {', '.join(cols)}"
+            res.append(result)
 
-            con.close()
-        except Exception as e:
-            output.append(f"\n{table}: Error - {e!s}")
+        result = f"DATABASE {table}, TABLES:\n" + "\n".join(res) + "\n"
+        db_info.append(result)
+        con.close()
 
-    return "\n".join(output)
+    except Exception as e:
+        db_info.append(f"\n{table}: Error - {e}")
+
+    return "\n".join(db_info)
 
 
-tools = [list_tables, query_table]
+tools = [list_tables]
