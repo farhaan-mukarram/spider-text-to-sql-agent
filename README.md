@@ -34,9 +34,15 @@ uv sync
 uv run main.py
 ```
 
+### Project Structure
+- `main.py`: Agent orchestration and evaluation loop
+- `utils/database.py`: Database utils and tools
+- `results.csv`: Evaluation results
+
+
 ## Dataset:
 [Spider dataset (dev split)](https://yale-lily.github.io/spider)
-```
+
 ```
 @inproceedings{Yu&al.18c,
   title     = {Spider: A Large-Scale Human-Labeled Dataset for Complex and Cross-Domain Semantic Parsing and Text-to-SQL Task},
@@ -47,9 +53,3 @@ uv run main.py
   year      = 2018
 }
 ```
-```
-
-### Project Structure
-- `main.py`: Agent orchestration and evaluation loop
-- `utils/database.py`: Database utils and tools
-- `results.csv`: Evaluation results
